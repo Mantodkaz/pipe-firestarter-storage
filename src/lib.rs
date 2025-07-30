@@ -6838,7 +6838,11 @@ pub async fn run_cli() -> Result<()> {
                 }
             }
         }
+<<<<<<< HEAD
         // update command
+=======
+        /// update command
+>>>>>>> 759e523 (Update lib.rs)
         Commands::Update => {
             update::update_command().await?;
         }
