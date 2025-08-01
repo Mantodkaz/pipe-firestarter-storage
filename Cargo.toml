@@ -24,6 +24,10 @@ tempfile = "3.8"
 atty = "0.2"
 regex = "1.10"
 
+# gui
+eframe = "0.27"
+rfd = "0.14"
+
 # Encryption dependencies
 aes-gcm = "0.10"
 argon2 = "0.5"
@@ -43,3 +47,6 @@ blake3 = "1.5"
 
 [dev-dependencies]
 tempfile = "3.7.0"
+
+[features]
+gui = []

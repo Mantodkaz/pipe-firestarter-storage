@@ -206,6 +206,8 @@ pub enum Commands {
         password: Option<String>,
         #[arg(long, help = "Show cost estimate without uploading")]
         dry_run: bool,
+        #[arg(long, help = "Print progress info for GUI integration")]
+        gui_style: bool,
     },
 
     /// Download a single file
@@ -237,6 +239,8 @@ pub enum Commands {
         quantum: bool,
         #[arg(long, help = "Use legacy download endpoint (base64 encoded)")]
         legacy: bool,
+        #[arg(long, help = "Print progress info for GUI integration")]
+        gui_style: bool,
     },
 
     /// Delete a file
@@ -1470,6 +1474,11 @@ async fn improved_download_file_with_auth_and_options(
         // Streaming mode: Get content length for progress bar
         let total_size = resp.content_length().unwrap_or(0);
         progress.set_length(total_size);
+        // Samakan logika dengan upload: jika --gui-style aktif, sembunyikan progress bar indicatif
+        let gui_style = std::env::args().any(|arg| arg == "--gui-style");
+        if gui_style {
+            progress.set_draw_target(indicatif::ProgressDrawTarget::hidden());
+        }
 
         // Stream the response directly to file (no base64 decoding needed for /download-stream)
         let file = tokio::fs::File::create(&output_path).await?;
@@ -1477,18 +1486,72 @@ async fn improved_download_file_with_auth_and_options(
         let mut stream = resp.bytes_stream();
         let mut downloaded: u64 = 0;
 
+        let start = std::time::Instant::now();
         while let Some(chunk) = stream.next().await {
             let chunk = chunk?;
             writer.write_all(&chunk).await?;
             downloaded += chunk.len() as u64;
             progress.set_position(downloaded);
+
+            // Calculate human-readable sizes
+            let human_downloaded = if downloaded > 1024 * 1024 {
+                format!("{:.2} MiB", downloaded as f64 / 1024.0 / 1024.0)
+            } else if downloaded > 1024 {
+                format!("{:.2} KiB", downloaded as f64 / 1024.0)
+            } else {
+                format!("{} B", downloaded)
+            };
+            let human_total = if total_size > 1024 * 1024 {
+                format!("{:.2} MiB", total_size as f64 / 1024.0 / 1024.0)
+            } else if total_size > 1024 {
+                format!("{:.2} KiB", total_size as f64 / 1024.0)
+            } else {
+                format!("{} B", total_size)
+            };
+
+            // Calculate percent
+            let percent = if total_size > 0 {
+                (downloaded as f64 / total_size as f64 * 100.0) as u8
+            } else {
+                0
+            };
+
+            // Calculate ETA
+            let elapsed = start.elapsed().as_secs_f64();
+            let eta = if downloaded > 0 && total_size > 0 {
+                let speed = downloaded as f64 / elapsed.max(0.1);
+                let remaining = (total_size - downloaded) as f64 / speed;
+                format!("{:.0}s", remaining)
+            } else {
+                "--".to_string()
+            };
+
+            // Print progress perline jika --gui-style, overwrite jika tidak
+            if gui_style {
+                println!("[PROGRESS] {} / {} ({}%, {})", human_downloaded, human_total, percent, eta);
+            } else {
+                print!("\r[PROGRESS] {} / {} ({}%, {})", human_downloaded, human_total, percent, eta);
+                std::io::stdout().flush().ok();
+            }
         }
+        println!(); // End progress line
+        // Print final progress line in upload style
+        let human_total = if total_size > 1024 * 1024 {
+            format!("{:.2} MiB", total_size as f64 / 1024.0 / 1024.0)
+        } else if total_size > 1024 {
+            format!("{:.2} KiB", total_size as f64 / 1024.0)
+        } else {
+            format!("{} B", total_size)
+        };
+        println!("[PROGRESS] {} / {} (100%, 0s)", human_total, human_total);
 
         writer.flush().await?;
-        progress.finish_with_message("Download completed");
+        if !gui_style {
+            progress.finish_with_message("Download completed");
+        }
     }
 
-    println!("File downloaded successfully to: {}", output_path);
+    println!("\n File downloaded successfully to: {}", output_path);
     Ok(())
 }
 
@@ -2778,11 +2841,16 @@ async fn upload_file_with_shared_progress(
     };
     use tokio_util::io::ReaderStream as InnerReaderStream;
 
+    // Detect --gui-style flag
+    let gui_style = std::env::args().any(|arg| arg == "--gui-style");
+
     struct ProgressStream<S> {
         inner: S,
         progress: Arc<ProgressBar>,
         bytes_uploaded: u64,
         shared_progress: Option<DirectoryUploadProgress>,
+        gui_style: bool,
+        total: u64,
     }
 
     impl<S> Stream for ProgressStream<S>
@@ -2798,14 +2866,20 @@ async fn upload_file_with_shared_progress(
                     self.bytes_uploaded += chunk_size;
 
                     if let Some(ref sp) = self.shared_progress {
-                        // Update shared progress using try_lock to avoid blocking
                         if let Ok(mut uploaded) = sp.uploaded_bytes.try_lock() {
                             *uploaded += chunk_size;
                             self.progress.set_position(*uploaded);
                         }
                     } else {
-                        // Update individual progress
                         self.progress.set_position(self.bytes_uploaded);
+                    }
+
+                    // Print progress info for GUI
+                    if self.gui_style {
+                        let done_mb = (self.bytes_uploaded as f64) / 1024.0 / 1024.0;
+                        let total_mb = (self.total as f64) / 1024.0 / 1024.0;
+                        let eta = self.progress.eta().as_secs();
+                        println!("PROGRESS: {:.2} MiB/{:.2} MiB ({}s)", done_mb, total_mb, eta);
                     }
 
                     Poll::Ready(Some(Ok(chunk)))
@@ -2816,10 +2890,12 @@ async fn upload_file_with_shared_progress(
     }
 
     let wrapped_stream = ProgressStream {
-        inner: InnerReaderStream::with_capacity(f, 1024 * 1024), // 1MB buffer for better throughput
+        inner: InnerReaderStream::with_capacity(f, 64 * 1024), // 64KB buffer for smoother GUI progress
         progress: progress.clone(),
         bytes_uploaded: 0,
         shared_progress: shared_progress.clone(),
+        gui_style,
+        total: file_size,
     };
 
     let body = Body::wrap_stream(wrapped_stream);
@@ -3955,6 +4031,7 @@ pub async fn run_cli() -> Result<()> {
             encrypt,
             password,
             dry_run,
+            ..
         } => {
             // Load credentials and check for JWT
             let mut creds = load_credentials_from_file(config_path)?.ok_or_else(|| {
@@ -4159,12 +4236,11 @@ pub async fn run_cli() -> Result<()> {
             user_app_key,
             file_name,
             output_path,
-            file_id: _,
             decrypt,
             password,
-            key: _,
             quantum,
             legacy,
+            ..
         } => {
             // Load credentials and check for JWT
             let mut creds = load_credentials_from_file(config_path)?.ok_or_else(|| {
