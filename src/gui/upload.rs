@@ -7,6 +7,8 @@ use std::path::Path;
 use std::process::Command;
 
 pub struct UploadPanelState {
+    pub tier_pricing_output: Arc<Mutex<Option<String>>>,
+    pub show_tier_popup: bool,
     pub selected_tier: usize, // 0: normal, 1: priority, 2: premium, 3: ultra, 4: enterprise
     pub status_raw: Arc<Mutex<String>>, 
     pub list_uploads: Arc<Mutex<String>>,
@@ -34,6 +36,8 @@ impl Default for UploadPanelState {
             processing_flag: Arc::new(Mutex::new(false)),
             upload_success: false,
             selected_tier: 0,
+            show_tier_popup: false,
+            tier_pricing_output: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -42,6 +46,7 @@ pub fn upload_download_panel(
     ui: &mut egui::Ui,
     panel_state: &mut UploadPanelState,
     state: &mut UploadDownloadState,
+    api_endpoint: &str,
 ) {
     // Sync processing flag for UI
     {
@@ -94,15 +99,82 @@ pub fn upload_download_panel(
                 ui.separator();
 
                 if state.mode == 0 {
-                    ui.label("Tier:");
-                    let tier_names = ["normal", "priority", "premium", "ultra", "enterprise"];
-                    egui::ComboBox::from_id_source("tier_combo")
-                        .selected_text(tier_names[panel_state.selected_tier])
-                        .show_ui(ui, |ui| {
-                            for (i, name) in tier_names.iter().enumerate() {
-                                ui.selectable_value(&mut panel_state.selected_tier, i, *name);
-                            }
-                        });
+                    ui.horizontal(|ui| {
+                        ui.label("Tier:");
+                        let tier_names = ["normal", "priority", "premium", "ultra", "enterprise"];
+                        egui::ComboBox::from_id_source("tier_combo")
+                            .selected_text(tier_names[panel_state.selected_tier])
+                            .show_ui(ui, |ui| {
+                                for (i, name) in tier_names.iter().enumerate() {
+                                    ui.selectable_value(&mut panel_state.selected_tier, i, *name);
+                                }
+                            });
+                        // Tombol tanda tanya untuk info tier pricing
+                        if ui.button("❓").on_hover_text("Show tier pricing info").clicked() {
+                            panel_state.show_tier_popup = true;
+                        }
+                    });
+                    if panel_state.show_tier_popup {
+                        // Jalankan command di thread agar UI tidak lag
+                        if panel_state.tier_pricing_output.lock().unwrap().is_none() {
+                            let output_ref = panel_state.tier_pricing_output.clone();
+                            std::thread::spawn(move || {
+                                let pricing_output = match std::process::Command::new("pipe")
+                                    .arg("get-tier-pricing")
+                                    .output() {
+                                    Ok(out) => {
+                                        if out.status.success() {
+                                            String::from_utf8_lossy(&out.stdout).to_string()
+                                        } else {
+                                            format!("Failed to get pricing:\n{}", String::from_utf8_lossy(&out.stderr))
+                                        }
+                                    }
+                                    Err(e) => format!("Failed to run CLI: {}", e),
+                                };
+                                let mut output_lock = output_ref.lock().unwrap();
+                                *output_lock = Some(pricing_output);
+                            });
+                        }
+                        egui::Window::new("Tier Pricing Info")
+                            .collapsible(false)
+                            .resizable(true)
+                            .default_size([650.0, 420.0])
+                            .show(ui.ctx(), |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label(egui::RichText::new("📊 Upload Tier Pricing").size(22.0).strong());
+                                });
+                                ui.separator();
+                                let pricing_output = panel_state.tier_pricing_output.lock().unwrap().clone();
+                                if let Some(pricing_output) = pricing_output {
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut pricing_output.clone())
+                                            .font(egui::TextStyle::Monospace)
+                                            .desired_rows(16)
+                                            .code_editor()
+                                            .interactive(false)
+                                            .text_color(egui::Color32::WHITE)
+                                            .frame(false)
+                                            .margin(egui::Vec2::splat(4.0))
+                                            .layouter(&mut |ui, text, _wrap_width| {
+                                                ui.fonts(|fonts| fonts.layout_no_wrap(
+                                                    text.to_string(),
+                                                    egui::FontId::monospace(16.0),
+                                                    egui::Color32::WHITE
+                                                ))
+                                            })
+                                    );
+                                    ui.add_space(8.0);
+                                    ui.label(egui::RichText::new("Note: Current price adjusts based on demand for Priority and Premium tiers.").size(14.0).color(egui::Color32::LIGHT_BLUE));
+                                } else {
+                                    ui.label(egui::RichText::new("Loading pricing info...").size(16.0).color(egui::Color32::YELLOW));
+                                }
+                                ui.add_space(8.0);
+                                if ui.button("Close").clicked() {
+                                    panel_state.show_tier_popup = false;
+                                    *panel_state.tier_pricing_output.lock().unwrap() = None;
+                                }
+                            });
+                    }
                     ui.label("Local file:");
                     ui.text_edit_singleline(&mut state.local_path);
                     if ui.button("📁 Choose File...").clicked() {
@@ -158,7 +230,10 @@ pub fn upload_download_panel(
                 ui.separator();
 
                 let button_label = if state.mode == 0 { "⬆️ Upload" } else { "⬇️ Download" };
-                let is_disabled = panel_state.is_processing;
+                // Validasi password wajib jika encrypt/decrypt dicentang
+                let password_required = (state.mode == 0 && panel_state.encrypt) || (state.mode == 1 && panel_state.decrypt);
+                let password_empty = panel_state.password.trim().is_empty();
+                let is_disabled = panel_state.is_processing || (password_required && password_empty);
                 if ui.add_enabled(!is_disabled, egui::Button::new(button_label)).clicked() {
                     // Set status_raw awal jika upload
                     {
@@ -190,6 +265,7 @@ pub fn upload_download_panel(
                     let legacy = state.legacy;
                     let selected_tier = panel_state.selected_tier;
                     let mode = state.mode;
+                    let api_endpoint = api_endpoint.to_string();
 
                     thread::spawn(move || {
                         use std::process::{Command, Stdio};
@@ -217,6 +293,9 @@ pub fn upload_download_panel(
                         if mode == 1 && legacy {
                             args.push("--legacy");
                         }
+                        // Tambahkan --api endpoint
+                        args.push("--api");
+                        args.push(&api_endpoint);
                         // Always add --gui-style for GUI progress info
                         args.push("--gui-style");
 

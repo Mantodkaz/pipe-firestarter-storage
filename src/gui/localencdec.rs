@@ -33,7 +33,7 @@ impl Default for LocalEncDecState {
     }
 }
 
-pub fn local_encdec_panel(ui: &mut egui::Ui, state: &mut LocalEncDecState) {
+pub fn local_encdec_panel(ui: &mut egui::Ui, state: &mut LocalEncDecState, api_endpoint: &str) {
     ui.vertical_centered(|ui| {
         ui.heading("🔒 Local Encrypt/Decrypt");
         ui.separator();
@@ -123,11 +123,12 @@ pub fn local_encdec_panel(ui: &mut egui::Ui, state: &mut LocalEncDecState) {
         let output_filename = state.output_filename.clone();
         let password = state.password.clone();
         let mode = state.mode;
+        let api_endpoint = api_endpoint.to_string();
 
         thread::spawn(move || {
             let output_path = Path::new(&output_folder).join(&output_filename).display().to_string();
 
-            let cmd = if mode == 0 {
+            let mut cmd = if mode == 0 {
                 vec![
                     "encrypt-local",
                     &input_path,
@@ -144,6 +145,9 @@ pub fn local_encdec_panel(ui: &mut egui::Ui, state: &mut LocalEncDecState) {
                     &password,
                 ]
             };
+            // Tambahkan argumen --api <endpoint>
+            cmd.push("--api");
+            cmd.push(&api_endpoint);
 
             let output = Command::new("pipe")
                 .args(&cmd)

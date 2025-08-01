@@ -1551,7 +1551,7 @@ async fn improved_download_file_with_auth_and_options(
         }
     }
 
-    println!("\n File downloaded successfully to: {}", output_path);
+    //println!("\n File downloaded successfully to: {}", output_path);
     Ok(())
 }
 
@@ -4209,7 +4209,7 @@ pub async fn run_cli() -> Result<()> {
 
             match upload_result {
                 Ok((uploaded_filename, token_cost)) => {
-                    println!("File uploaded successfully: {}", uploaded_filename);
+                   // println!("File uploaded successfully: {}", uploaded_filename);
                     if token_cost > 0.0 {
                         println!("💰 Cost: {} PIPE tokens", token_cost);
                     }

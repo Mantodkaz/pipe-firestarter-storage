@@ -46,21 +46,21 @@ fn filter_numeric(input: &mut String) {
 }
 
 impl WalletPanelState {
-    pub fn refresh_wallet(&mut self) {
+    pub fn refresh_wallet_with_api(&mut self, api_endpoint: &str) {
         let sol_address = self.sol_address.clone();
         let sol_balance = self.sol_balance.clone();
         let pipe_balance = self.pipe_balance.clone();
         let pipe_mint = self.pipe_mint.clone();
         let is_loading = self.is_loading.clone();
-
+        let api = api_endpoint.to_string();
         {
             let mut loading = is_loading.lock().unwrap();
             *loading = true;
         }
-
         thread::spawn(move || {
             let sol_output = Command::new("pipe")
                 .arg("check-sol")
+                .arg("--api").arg(&api)
                 .output();
             let mut address = String::from("-");
             let mut sol = String::from("-");
@@ -77,9 +77,9 @@ impl WalletPanelState {
             }
             *sol_address.lock().unwrap() = address.clone();
             *sol_balance.lock().unwrap() = sol.clone();
-
             let pipe_output = Command::new("pipe")
                 .arg("check-token")
+                .arg("--api").arg(&api)
                 .output();
             let mut pipe = String::from("-");
             let mut mint = String::from(PIPE_MINT);
@@ -96,20 +96,20 @@ impl WalletPanelState {
             }
             *pipe_balance.lock().unwrap() = pipe.clone();
             *pipe_mint.lock().unwrap() = mint.clone();
-
             let mut loading = is_loading.lock().unwrap();
             *loading = false;
         });
     }
-
-    pub fn refresh_usage(&mut self) {
+    pub fn refresh_usage_with_api(&mut self, api_endpoint: &str) {
         let usage_report = self.usage_report.clone();
         let period = self.selected_period.clone();
+        let api = api_endpoint.to_string();
         thread::spawn(move || {
             let usage_output = Command::new("pipe")
                 .arg("token-usage")
                 .arg("-p")
                 .arg(&period)
+                .arg("--api").arg(&api)
                 .output();
             let mut usage = String::from("No usage data.");
             if let Ok(out) = usage_output {
@@ -129,14 +129,15 @@ impl WalletPanelState {
             *usage_report.lock().unwrap() = usage;
         });
     }
-
-    pub fn swap_sol_for_pipe(&mut self) {
+    pub fn swap_sol_for_pipe_with_api(&mut self, api_endpoint: &str) {
         let amount = self.swap_sol_amount.clone();
         let status = self.last_action_status.clone();
+        let api = api_endpoint.to_string();
         thread::spawn(move || {
             let output = Command::new("pipe")
                 .arg("swap-sol-for-pipe")
                 .arg(&amount)
+                .arg("--api").arg(&api)
                 .output();
             let mut result = String::from("Swap failed.");
             if let Ok(out) = output {
@@ -146,16 +147,17 @@ impl WalletPanelState {
             *status.lock().unwrap() = result;
         });
     }
-
-    pub fn withdraw_sol(&mut self) {
+    pub fn withdraw_sol_with_api(&mut self, api_endpoint: &str) {
         let amount = self.withdraw_sol_amount.clone();
         let to_pubkey = self.withdraw_sol_pubkey.clone();
         let status = self.last_action_status.clone();
+        let api = api_endpoint.to_string();
         thread::spawn(move || {
             let output = Command::new("pipe")
                 .arg("withdraw-sol")
                 .arg(&amount)
                 .arg(&to_pubkey)
+                .arg("--api").arg(&api)
                 .output();
             let mut result = String::from("Withdraw SOL failed.");
             if let Ok(out) = output {
@@ -165,18 +167,19 @@ impl WalletPanelState {
             *status.lock().unwrap() = result;
         });
     }
-
-    pub fn withdraw_pipe(&mut self) {
+    pub fn withdraw_pipe_with_api(&mut self, api_endpoint: &str) {
         let mint = PIPE_MINT.to_string();
         let amount = self.withdraw_pipe_amount.clone();
         let to_pubkey = self.withdraw_pipe_pubkey.clone();
         let status = self.last_action_status.clone();
+        let api = api_endpoint.to_string();
         thread::spawn(move || {
             let output = Command::new("pipe")
                 .arg("withdraw-custom-token")
                 .arg(&mint)
                 .arg(&amount)
                 .arg(&to_pubkey)
+                .arg("--api").arg(&api)
                 .output();
             let mut result = String::from("Withdraw PIPE failed.");
             if let Ok(out) = output {
@@ -188,11 +191,11 @@ impl WalletPanelState {
     }
 }
 
-pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState) {
+pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState, api_endpoint: &str) {
     if !panel_state.first_open {
         panel_state.selected_period = "30d".to_string();
-        panel_state.refresh_wallet();
-        panel_state.refresh_usage();
+        panel_state.refresh_wallet_with_api(api_endpoint);
+        panel_state.refresh_usage_with_api(api_endpoint);
         panel_state.first_open = true;
     }
 
@@ -241,7 +244,7 @@ pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState) {
                     ui.spinner();
                 }
                 if ui.button("Refresh Wallet Info").clicked() {
-                    panel_state.refresh_wallet();
+                    panel_state.refresh_wallet_with_api(api_endpoint);
                 }
 
                 ui.separator();
@@ -269,8 +272,8 @@ pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState) {
                                 filter_numeric(&mut panel_state.swap_sol_amount);
                             }
                             if ui.button("Swap").clicked() {
-                                panel_state.swap_sol_for_pipe();
-                                panel_state.refresh_wallet();
+                                panel_state.swap_sol_for_pipe_with_api(api_endpoint);
+                                panel_state.refresh_wallet_with_api(api_endpoint);
                             }
                         });
                     }
@@ -290,8 +293,8 @@ pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState) {
                                     .desired_width(100.0)
                             );
                             if ui.button("Withdraw SOL").clicked() {
-                                panel_state.withdraw_sol();
-                                panel_state.refresh_wallet();
+                                panel_state.withdraw_sol_with_api(api_endpoint);
+                                panel_state.refresh_wallet_with_api(api_endpoint);
                             }
                         });
                     }
@@ -311,8 +314,8 @@ pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState) {
                                     .desired_width(100.0)
                             );
                             if ui.button("Withdraw PIPE").clicked() {
-                                panel_state.withdraw_pipe();
-                                panel_state.refresh_wallet();
+                                panel_state.withdraw_pipe_with_api(api_endpoint);
+                                panel_state.refresh_wallet_with_api(api_endpoint);
                             }
                         });
                     }
@@ -344,7 +347,7 @@ pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState) {
                     let periods = ["7d", "30d", "90d", "365d", "all"];
                     for &p in &periods {
                         if ui.radio_value(&mut panel_state.selected_period, p.to_string(), p).changed() {
-                            panel_state.refresh_usage();
+                            panel_state.refresh_usage_with_api(api_endpoint);
                         }
                     }
                 });
