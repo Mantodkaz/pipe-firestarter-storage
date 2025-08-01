@@ -2823,12 +2823,17 @@ async fn upload_file_with_shared_progress(
         Some(ref sp) => (sp.progress_bar.clone(), true),
         None => {
             let pb = ProgressBar::new(file_size);
-            pb.set_style(
-                ProgressStyle::default_bar()
-                    .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-                    .unwrap()
-                    .progress_chars("#>-"),
-            );
+            let gui_style = std::env::args().any(|arg| arg == "--gui-style");
+            if gui_style {
+                pb.set_draw_target(indicatif::ProgressDrawTarget::hidden());
+            } else {
+                pb.set_style(
+                    ProgressStyle::default_bar()
+                        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
+                        .unwrap()
+                        .progress_chars("#>-"),
+                );
+            }
             (Arc::new(pb), false)
         }
     };

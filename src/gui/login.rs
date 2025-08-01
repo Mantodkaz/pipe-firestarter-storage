@@ -27,47 +27,42 @@ pub fn login_panel(ui: &mut egui::Ui, state: &mut LoginState, api_endpoint: &str
     ui.vertical_centered(|ui| {
         ui.add_space(48.0);
         ui.centered_and_justified(|ui| {
-            ui.add_space(24.0);
             ui.group(|ui| {
                 ui.set_min_width(360.0);
                 ui.vertical_centered(|ui| {
-                    ui.add_space(16.0);
                     ui.heading(egui::RichText::new("🔑 Login to Pipe Network").size(24.0).strong());
+                    ui.add_space(32.0);
+
+                    // Username row
+                    ui.horizontal(|ui| {
+                        ui.label("Username :");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut state.username)
+                                .hint_text("Enter your username")
+                                .desired_width(200.0),
+                        );
+                    });
+                    ui.add_space(16.0);
+
+                    // Password row
+                    ui.horizontal(|ui| {
+                        ui.label("Password :");
+                        let password_edit = egui::TextEdit::singleline(&mut state.password)
+                            .password(!state.show_password)
+                            .hint_text("Enter your password")
+                            .desired_width(200.0);
+                        ui.add(password_edit);
+                        if ui.button(if state.show_password { "🐵" } else { "🙈" }).clicked() {
+                            state.show_password = !state.show_password;
+                        }
+                    });
                     ui.add_space(24.0);
 
-                    ui.label("Username:");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut state.username)
-                            .hint_text("Enter your username")
-                            .desired_width(240.0),
-                    );
-
-                    ui.add_space(12.0);
-                    ui.label("Password:");
-
-                    ui.horizontal_centered(|ui| {
-                        ui.group(|ui| {
-                            ui.horizontal(|ui| {
-                                ui.add_sized(
-                                    egui::vec2(200.0, 24.0),
-                                    egui::TextEdit::singleline(&mut state.password)
-                                        .password(!state.show_password)
-                                        .hint_text("Enter your password"),
-                                );
-                                if ui.button(if state.show_password { "🐵" } else { "🙈" }).clicked() {
-                                    state.show_password = !state.show_password;
-                                }
-                            });
-                        });
-                    });
-
-
-                    ui.add_space(20.0);
-
+                    // Login button
                     let is_loading = *state.is_loading.lock().unwrap();
                     let can_login = !is_loading && !state.username.is_empty() && !state.password.is_empty();
-
-                    ui.horizontal_centered(|ui| {
+                    ui.horizontal(|ui| {
+                        ui.add_space(60.0);
                         if ui
                             .add_enabled(
                                 can_login,
@@ -125,7 +120,6 @@ pub fn login_panel(ui: &mut egui::Ui, state: &mut LoginState, api_endpoint: &str
                     }
                 });
             });
-            ui.add_space(24.0);
         });
     });
 }
