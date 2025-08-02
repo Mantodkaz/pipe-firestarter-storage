@@ -2,6 +2,7 @@ use eframe::egui;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::process::Command;
+use super::utils::get_current_executable_path;
 
 #[derive(Default)]
 pub struct WalletPanelState {
@@ -35,9 +36,8 @@ impl Default for WithdrawMode {
     }
 }
 
-const PIPE_MINT: &str = "35mhJor7qTD212YXdLkB8sRzTbaYRXmTzHTCFSDP5voJ";
+const PIPE_MINT: &str = "35mhJor7qTD212YXdLkB8sRzTbaYRXmTzHTCFSDP5voJ"; // pipe SPL (devnet)
 
-// Filter input agar hanya angka dan titik
 fn filter_numeric(input: &mut String) {
     let filtered: String = input.chars()
         .filter(|c| c.is_ascii_digit() || *c == '.')
@@ -58,7 +58,8 @@ impl WalletPanelState {
             *loading = true;
         }
         thread::spawn(move || {
-            let sol_output = Command::new("pipe")
+            let current_exe = get_current_executable_path();
+            let sol_output = Command::new(&current_exe)
                 .arg("check-sol")
                 .arg("--api").arg(&api)
                 .output();
@@ -77,7 +78,7 @@ impl WalletPanelState {
             }
             *sol_address.lock().unwrap() = address.clone();
             *sol_balance.lock().unwrap() = sol.clone();
-            let pipe_output = Command::new("pipe")
+            let pipe_output = Command::new(&current_exe)
                 .arg("check-token")
                 .arg("--api").arg(&api)
                 .output();
@@ -105,7 +106,8 @@ impl WalletPanelState {
         let period = self.selected_period.clone();
         let api = api_endpoint.to_string();
         thread::spawn(move || {
-            let usage_output = Command::new("pipe")
+            let current_exe = get_current_executable_path();
+            let usage_output = Command::new(&current_exe)
                 .arg("token-usage")
                 .arg("-p")
                 .arg(&period)
@@ -134,7 +136,8 @@ impl WalletPanelState {
         let status = self.last_action_status.clone();
         let api = api_endpoint.to_string();
         thread::spawn(move || {
-            let output = Command::new("pipe")
+            let current_exe = get_current_executable_path();
+            let output = Command::new(&current_exe)
                 .arg("swap-sol-for-pipe")
                 .arg(&amount)
                 .arg("--api").arg(&api)
@@ -153,7 +156,8 @@ impl WalletPanelState {
         let status = self.last_action_status.clone();
         let api = api_endpoint.to_string();
         thread::spawn(move || {
-            let output = Command::new("pipe")
+            let current_exe = get_current_executable_path();
+            let output = Command::new(&current_exe)
                 .arg("withdraw-sol")
                 .arg(&amount)
                 .arg(&to_pubkey)
@@ -174,7 +178,8 @@ impl WalletPanelState {
         let status = self.last_action_status.clone();
         let api = api_endpoint.to_string();
         thread::spawn(move || {
-            let output = Command::new("pipe")
+            let current_exe = get_current_executable_path();
+            let output = Command::new(&current_exe)
                 .arg("withdraw-custom-token")
                 .arg(&mint)
                 .arg(&amount)
@@ -251,7 +256,6 @@ pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState, api_e
                 ui.heading("Swap & Withdraw");
                 ui.add_space(6.0);
 
-                // Radio mode
                 ui.horizontal(|ui| {
                     ui.radio_value(&mut panel_state.withdraw_mode, WithdrawMode::SwapSolForPipe, "Swap SOL for PIPE");
                     ui.radio_value(&mut panel_state.withdraw_mode, WithdrawMode::WithdrawSol, "Withdraw SOL");
@@ -329,7 +333,7 @@ pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState, api_e
             });
         });
 
-        // Kanan: Token Usage Report
+        // Usage Report
         columns[1].set_min_width(340.0);
         columns[1].group(|ui| {
             ui.set_min_width(340.0);
@@ -361,7 +365,7 @@ pub fn wallet_panel(ui: &mut egui::Ui, panel_state: &mut WalletPanelState, api_e
     });
 }
 
-// Helper: render usage report with better style
+// render usage report
 fn render_usage_report(ui: &mut egui::Ui, usage: &str) {
     let lines: Vec<&str> = usage.lines().collect();
     let mut section = String::new();

@@ -4,6 +4,7 @@ use rfd::FileDialog;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use super::utils::get_current_executable_path;
 
 pub struct LocalEncDecState {
     pub input_path: String,
@@ -145,11 +146,10 @@ pub fn local_encdec_panel(ui: &mut egui::Ui, state: &mut LocalEncDecState, api_e
                     &password,
                 ]
             };
-            // Tambahkan argumen --api <endpoint>
             cmd.push("--api");
             cmd.push(&api_endpoint);
-
-            let output = Command::new("pipe")
+            let current_exe = get_current_executable_path();
+            let output = Command::new(&current_exe)
                 .args(&cmd)
                 .output();
 
@@ -170,7 +170,7 @@ pub fn local_encdec_panel(ui: &mut egui::Ui, state: &mut LocalEncDecState, api_e
         });
     }
 
-    // Polling status: show success only after process done
+    // Polling
     if state.is_processing {
         let status = state.status_raw.lock().unwrap().clone();
         if status.contains("✅ Process completed successfully!") || status.contains("❌") {
@@ -180,7 +180,6 @@ pub fn local_encdec_panel(ui: &mut egui::Ui, state: &mut LocalEncDecState, api_e
     }
 
     ui.separator();
-    // Responsive status output
     {
         let status_raw = state.status_raw.lock().unwrap().clone();
         let lines = status_raw.lines();

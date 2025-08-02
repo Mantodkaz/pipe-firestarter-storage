@@ -32,7 +32,7 @@ pub async fn update_command() -> Result<()> {
         return Err(anyhow!("Failed to install new version"));
     }
 
-    // Remove cloned repo
+    // Remove dummy update directory
     if Path::new(&update_dir).exists() {
         fs::remove_dir_all(&update_dir)?;
     }

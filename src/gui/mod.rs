@@ -4,7 +4,9 @@ pub mod upload;
 pub mod localencdec;
 pub mod wallet;
 pub mod login;
-// Panel lain bisa ditambahkan seperti: pub mod encryption; pub mod wallet; dst.
+pub mod list;
+pub mod link;
+pub mod utils;
 
 #[derive(Default)]
 pub struct UploadDownloadState {
@@ -21,8 +23,10 @@ pub struct PipeGuiApp {
     pub upload_download: UploadDownloadState,
     pub localencdec_state: localencdec::LocalEncDecState,
     pub wallet_panel: wallet::WalletPanelState,
-    pub api_endpoint: String, // Endpoint API Pipe Network
+    pub link_state: link::CreateLinkState,
+    pub api_endpoint: String, // Endpoint
     pub login_state: login::LoginState,
+    pub list_uploads_state: list::ListUploadsState,
 }
 
 impl Default for PipeGuiApp {
@@ -33,8 +37,10 @@ impl Default for PipeGuiApp {
             upload_download: UploadDownloadState::default(),
             localencdec_state: localencdec::LocalEncDecState::default(),
             wallet_panel: wallet::WalletPanelState::default(),
+            link_state: link::CreateLinkState::default(),
             api_endpoint: "https://us-west-00-firestarter.pipenetwork.com".to_string(),
             login_state: login::LoginState::default(),
+            list_uploads_state: list::ListUploadsState::default(),
         }
     }
 }
@@ -58,17 +64,16 @@ impl eframe::App for PipeGuiApp {
                 ui.heading("Firestarter Storage");
                 ui.separator();
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    // Endpoint input di kanan, label di kiri
                     ui.text_edit_singleline(&mut self.api_endpoint);
-                    if ui.button("Reset to Default").clicked() {
+                    if ui.button("Reset Endpoint").clicked() {
                         self.api_endpoint = "https://us-west-00-firestarter.pipenetwork.com".to_string();
                     }
                 });
-                // Tambahkan logo, versi, dsb di sini jika perlu
+                // for future use 
             });
         });
 
-        if self.login_state.logged_in {
+        if self.login_state.logged_in && self.login_state.has_valid_credentials {
             egui::SidePanel::left("sidebar").show(ctx, |ui| {
                 ui.heading("Menu");
                 ui.separator();
@@ -95,13 +100,13 @@ impl eframe::App for PipeGuiApp {
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if !self.login_state.logged_in {
+            if !self.login_state.logged_in || !self.login_state.has_valid_credentials {
                 ui.centered_and_justified(|ui| {
                     login::login_panel(ui, &mut self.login_state, &self.api_endpoint);
                 });
-                // Check login status from status string
+                // Check login status
                 let status = self.login_state.status.lock().unwrap().clone();
-                if status.contains("✅ Login successful!") {
+                if status.contains("✅ Login successful!") && self.login_state.has_valid_credentials {
                     self.login_state.logged_in = true;
                 }
             } else {
@@ -111,6 +116,7 @@ impl eframe::App for PipeGuiApp {
                         &mut self.upload_panel,
                         &mut self.upload_download,
                         &self.api_endpoint,
+                        &mut self.list_uploads_state,
                     ),
                     1 => localencdec::local_encdec_panel(
                         ui,
@@ -124,22 +130,23 @@ impl eframe::App for PipeGuiApp {
                     ),
                     3 => {
                         ui.vertical_centered(|ui| {
-                            ui.heading("Key Management Panel (coming soon)");
+                            ui.heading("Key Management (soon)");
                         });
                     }
-                    4 => {
-                        ui.vertical_centered(|ui| {
-                            ui.heading("Create Link Panel (coming soon)");
-                        });
-                    }
+                    4 => link::create_link_panel(
+                        ui,
+                        &mut self.link_state,
+                        &self.api_endpoint,
+                        &self.list_uploads_state.uploads,
+                    ),
                     5 => {
                         ui.vertical_centered(|ui| {
-                            ui.heading("Update Firestarter Panel (coming soon)");
+                            ui.heading("Update Firestarter (soon)");
                         });
                     }
                     _ => {
                         ui.vertical_centered(|ui| {
-                            ui.heading("Pilih panel di sidebar");
+                            ui.heading("");
                         });
                     }
                 }

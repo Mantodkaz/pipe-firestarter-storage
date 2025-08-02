@@ -154,6 +154,8 @@ pub enum Commands {
     /// Create a new user
     NewUser {
         username: String,
+        #[arg(short, long, help = "Password for the new user (will prompt if not provided)")]
+        password: Option<String>,
     },
 
     /// Login with username and password (JWT authentication)
@@ -1474,7 +1476,7 @@ async fn improved_download_file_with_auth_and_options(
         // Streaming mode: Get content length for progress bar
         let total_size = resp.content_length().unwrap_or(0);
         progress.set_length(total_size);
-        // Samakan logika dengan upload: jika --gui-style aktif, sembunyikan progress bar indicatif
+        // Set progress bar visibility based on --gui-style flag
         let gui_style = std::env::args().any(|arg| arg == "--gui-style");
         if gui_style {
             progress.set_draw_target(indicatif::ProgressDrawTarget::hidden());
@@ -1526,7 +1528,7 @@ async fn improved_download_file_with_auth_and_options(
                 "--".to_string()
             };
 
-            // Print progress perline jika --gui-style, overwrite jika tidak
+            // Print progress line (gui style or terminal style)
             if gui_style {
                 println!("[PROGRESS] {} / {} ({}%, {})", human_downloaded, human_total, percent, eta);
             } else {
@@ -3581,7 +3583,7 @@ pub async fn run_cli() -> Result<()> {
     */
 
     match cli.command {
-        Commands::NewUser { username } => {
+        Commands::NewUser { username, password } => {
             let req_body = CreateUserRequest {
                 username: username.clone(),
             };
@@ -3605,20 +3607,25 @@ pub async fn run_cli() -> Result<()> {
                 // Save basic credentials first
                 save_credentials_to_file(&json.user_id, &json.user_app_key, config_path)?;
 
-                // Prompt for optional password
-                println!("\nSet a password for secure access (or press Enter to skip):");
-                println!("Note: Password is optional. You can use pipe without it.");
+                // Handle password setting
+                let password_to_set = if let Some(provided_password) = password {
+                    // Password provided via --password parameter
+                    provided_password
+                } else {
+                    // Prompt for optional password
+                    println!("\nSet a password for secure access (or press Enter to skip):");
+                    println!("Note: Password is optional. You can use pipe without it.");
+                    rpassword::prompt_password("Password: ").unwrap_or_default()
+                };
 
-                let password = rpassword::prompt_password("Password: ").unwrap_or_default();
-
-                if !password.is_empty() {
+                if !password_to_set.is_empty() {
                     // User wants to set a password
                     println!("Setting password...");
 
                     let set_password_req = SetPasswordRequest {
                         user_id: json.user_id.clone(),
                         user_app_key: json.user_app_key.clone(),
-                        new_password: password,
+                        new_password: password_to_set,
                     };
 
                     let resp = client
