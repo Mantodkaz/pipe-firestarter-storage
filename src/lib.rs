@@ -25,7 +25,6 @@ use tokio::sync::Mutex as TokioMutex;
 use tokio::sync::Semaphore;
 use walkdir::WalkDir;
 
-mod update;
 mod encryption;
 mod keyring;
 mod quantum;
@@ -589,8 +588,6 @@ pub enum Commands {
         #[arg(long, default_value = "5")]
         parallel: usize,
     },
-    /// Update Pipe CLI to the latest version
-    Update,
 }
 
 #[derive(Subcommand, Debug)]
@@ -6849,9 +6846,6 @@ pub async fn run_cli() -> Result<()> {
                     }
                 }
             }
-        }
-        Commands::Update => {
-            update::update_command().await?;
         }
     }
     Ok(())
