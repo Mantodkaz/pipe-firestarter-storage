@@ -50,6 +50,10 @@ blake3 = "1.5"
 [dev-dependencies]
 tempfile = "3.7.0"
 
+# Windows resource compilation
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
+
 # Binary configuration for GUI mode (Windows)
 [[bin]]
 name = "pipe"

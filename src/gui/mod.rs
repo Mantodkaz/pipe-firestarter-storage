@@ -46,12 +46,35 @@ impl Default for PipeGuiApp {
 }
 
 pub fn run_gui() {
-    let options = eframe::NativeOptions::default();
+    let mut options = eframe::NativeOptions::default();
+    
+    // Set window properties
+    options.viewport.inner_size = Some([1200.0, 800.0].into());
+    options.viewport.min_inner_size = Some([800.0, 600.0].into());
+    options.viewport.resizable = Some(true);
+    
+    // Set window title and icon
+    options.viewport.title = Some("Pipe Network - Firestarter Storage".to_string());
+    
+    // Try to load icon from embedded data or file
+    #[cfg(windows)]
+    {
+        // Window icon will be handled by winres in build.rs
+    }
+    
     let _ = eframe::run_native(
-        "Pipe Network",
+        "Pipe Network - Firestarter Storage",
         options,
         Box::new(|cc| {
+            // Configure visuals
             cc.egui_ctx.set_visuals(egui::Visuals::dark());
+            
+            // Set application icon if available
+            #[cfg(feature = "gui")]
+            {
+                // Icon will be embedded via build.rs
+            }
+            
             Box::new(PipeGuiApp::default())
         }),
     );
@@ -61,15 +84,28 @@ impl eframe::App for PipeGuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.heading("Firestarter Storage");
+                // Logo/Brand section
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        // Fire emoji as logo placeholder
+                        ui.heading("🔥");
+                        ui.vertical(|ui| {
+                            ui.heading("Pipe Network");
+                            ui.small("Firestarter Storage");
+                        });
+                    });
+                });
+                
                 ui.separator();
+                
+                // API Endpoint section
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.text_edit_singleline(&mut self.api_endpoint);
                     if ui.button("Reset Endpoint").clicked() {
                         self.api_endpoint = "https://us-west-00-firestarter.pipenetwork.com".to_string();
                     }
+                    ui.add_sized([300.0, 20.0], egui::TextEdit::singleline(&mut self.api_endpoint).hint_text("API Endpoint"));
+                    ui.label("Endpoint:");
                 });
-                // for future use 
             });
         });
 
