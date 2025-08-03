@@ -70,9 +70,10 @@ impl ListUploadsState {
     }
 
     pub fn force_refresh(&mut self) {
-        // Use saturating_sub to prevent overflow panics
+        // Use checked_sub to prevent overflow panics
         self.last_refresh = std::time::Instant::now()
-            .saturating_sub(std::time::Duration::from_secs(11));
+            .checked_sub(std::time::Duration::from_secs(11))
+            .unwrap_or_else(|| std::time::Instant::now());
         let mut loading = self.is_loading.lock().unwrap();
         *loading = true;
     }

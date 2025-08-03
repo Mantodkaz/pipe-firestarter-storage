@@ -819,9 +819,13 @@ pub struct ServiceDiscoveryCache {
 
 impl ServiceDiscoveryCache {
     pub fn new(fallback_endpoint: String) -> Self {
+        // Initialize with a time that's definitely in the past to force refresh
+        let past_time = Instant::now().checked_sub(Duration::from_secs(3600))
+            .unwrap_or_else(|| Instant::now());
+        
         Self {
             instances: RwLock::new(Vec::new()),
-            last_refresh: RwLock::new(Instant::now().saturating_sub(Duration::from_secs(3600))), // Force refresh on first use
+            last_refresh: RwLock::new(past_time), // Force refresh on first use
             refresh_interval: Duration::from_secs(60),
             fallback_endpoint,
         }
