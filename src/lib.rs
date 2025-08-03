@@ -821,7 +821,7 @@ impl ServiceDiscoveryCache {
     pub fn new(fallback_endpoint: String) -> Self {
         Self {
             instances: RwLock::new(Vec::new()),
-            last_refresh: RwLock::new(Instant::now() - Duration::from_secs(3600)), // Force refresh on first use
+            last_refresh: RwLock::new(Instant::now().saturating_sub(Duration::from_secs(3600))), // Force refresh on first use
             refresh_interval: Duration::from_secs(60),
             fallback_endpoint,
         }
